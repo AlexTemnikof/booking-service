@@ -1,7 +1,7 @@
 package com.example.booking.web;
 
-import com.example.booking.core.user.User;
-import com.example.booking.core.user.UserRepository;
+import com.example.booking.model.User;
+import com.example.booking.repository.UserRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -19,40 +19,27 @@ public class UserAdminController {
 
     @GetMapping
     @PreAuthorize("hasAuthority('SCOPE_ADMIN')")
-    public List<User> getAllUsers() {
-        return userRepository.findAll();
-    }
+    public List<User> list() { return userRepository.findAll(); }
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAuthority('SCOPE_ADMIN')")
-    public ResponseEntity<User> getUserById(@PathVariable Long id) {
-        return userRepository.findById(id)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+    public ResponseEntity<User> get(@PathVariable Long id) {
+        return userRepository.findById(id).map(ResponseEntity::ok).orElse(ResponseEntity.notFound().build());
     }
 
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('SCOPE_ADMIN')")
-    public ResponseEntity<User> updateUser(@PathVariable Long id, @RequestBody User user) {
+    public ResponseEntity<User> update(@PathVariable Long id, @RequestBody User u) {
         return userRepository.findById(id)
-                .map(existingUser -> updateExistingUser(existingUser, user))
+                .map(ex -> { u.setId(id); return ResponseEntity.ok(userRepository.save(u)); })
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('SCOPE_ADMIN')")
-    public ResponseEntity<Void> deleteUser(@PathVariable Long id) {
-        if (!userRepository.existsById(id)) {
-            return ResponseEntity.notFound().build();
-        }
-
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
         userRepository.deleteById(id);
         return ResponseEntity.noContent().build();
     }
-
-    private ResponseEntity<User> updateExistingUser(User existingUser, User updatedUser) {
-        updatedUser.withId(existingUser.getId());
-        final User savedUser = userRepository.save(updatedUser);
-        return ResponseEntity.ok(savedUser);
-    }
 }
+

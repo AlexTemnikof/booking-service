@@ -1,104 +1,90 @@
 package com.example.hotel.web;
 
-import com.example.hotel.core.room.Room;
-import com.example.hotel.core.reservation.RoomReservationLock;
-import com.example.hotel.core.hotel.HotelServiceImpl;
+import com.example.hotel.dto.RequestIdDto;
+import com.example.hotel.dto.RoomDto;
+import com.example.hotel.dto.RoomReservationDto;
+import com.example.hotel.dto.RoomReservationRequestDto;
+import com.example.hotel.service.HotelManagementService;
+import com.example.hotel.service.RoomReservationService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import java.time.LocalDate;
-import java.util.Map;
-
 @RestController
 @RequestMapping("/rooms")
+@RequiredArgsConstructor
+@Tag(name = "Rooms", description = "Room management and reservation operations")
 @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearer-jwt")
 public class RoomController {
-
-    private static final String SCOPE_ADMIN = "hasAuthority('SCOPE_ADMIN')";
-
-    private final HotelServiceImpl hotelService;
-
-    public RoomController(final HotelServiceImpl hotelService) {
-        this.hotelService = hotelService;
-    }
+    private final HotelManagementService hotelService;
+    private final RoomReservationService reservationService;
 
     @GetMapping("/{id}")
-    public ResponseEntity<Room> getRoom(@PathVariable final Long id) {
-        return hotelService.getRoom(id)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+    @Operation(summary = "Get room by ID", description = "Returns a room by its ID")
+    public ResponseEntity<RoomDto> getRoomById(@PathVariable Long id) {
+        return ResponseEntity.ok(hotelService.getRoomById(id));
     }
 
-    @PreAuthorize(SCOPE_ADMIN)
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN')")
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public Room createRoom(@Valid @RequestBody final Room room) {
-        return hotelService.saveRoom(room);
+    @Operation(summary = "Create room", description = "Creates a new room (admin only)")
+    public RoomDto createRoom(@Valid @RequestBody RoomDto roomDto) {
+        return hotelService.createRoom(roomDto);
     }
 
-    @PreAuthorize(SCOPE_ADMIN)
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN')")
     @PutMapping("/{id}")
-    public ResponseEntity<Room> updateRoom(@PathVariable final Long id, @Valid @RequestBody final Room room) {
-        return hotelService.getRoom(id)
-                .map(existing -> {
-                    room.withId(id);
-                    final Room updatedRoom = hotelService.saveRoom(room);
-                    return ResponseEntity.ok(updatedRoom);
-                })
-                .orElse(ResponseEntity.notFound().build());
+    @Operation(summary = "Update room", description = "Updates an existing room (admin only)")
+    public ResponseEntity<RoomDto> updateRoom(@PathVariable Long id, @Valid @RequestBody RoomDto roomDto) {
+        return ResponseEntity.ok(hotelService.updateRoom(id, roomDto));
     }
 
-    @PreAuthorize(SCOPE_ADMIN)
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN')")
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public ResponseEntity<Void> deleteRoom(@PathVariable final Long id) {
+    @Operation(summary = "Delete room", description = "Deletes a room by its ID (admin only)")
+    public void deleteRoom(@PathVariable Long id) {
         hotelService.deleteRoom(id);
-        return ResponseEntity.noContent().build();
     }
 
-
+    // Reservation operations
     @PostMapping("/{id}/hold")
-    public ResponseEntity<RoomReservationLock> holdRoom(
-            @PathVariable final Long id,
-            @Valid @RequestBody final HoldRequest request) {
+    @Operation(summary = "Hold room", description = "Places a temporary hold on a room for reservation")
+    public ResponseEntity<RoomReservationDto> holdRoom(
+            @PathVariable Long id, 
+            @Valid @RequestBody RoomReservationRequestDto request) {
 
-        try {
-            final RoomReservationLock lock = hotelService.holdRoom(
-                    request.requestId(), id, request.startDate(), request.endDate());
-            return ResponseEntity.ok(lock);
-        } catch (IllegalStateException e) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).build();
-        }
+        RoomReservationDto reservation = reservationService.holdRoom(
+                request.getRequestId(), 
+                id, 
+                request.getStartDate(), 
+                request.getEndDate()
+        );
+
+        return ResponseEntity.ok(reservation);
     }
 
     @PostMapping("/{id}/confirm")
-    public ResponseEntity<RoomReservationLock> confirmHold(
-            @PathVariable final Long id,
-            @Valid @RequestBody final IdRequest request) {
+    @Operation(summary = "Confirm hold", description = "Confirms a previously held room reservation")
+    public ResponseEntity<RoomReservationDto> confirmHold(
+            @PathVariable Long id, 
+            @Valid @RequestBody RequestIdDto request) {
 
-        try {
-            final RoomReservationLock lock = hotelService.confirmHold(request.requestId());
-            return ResponseEntity.ok(lock);
-        } catch (IllegalStateException e) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).build();
-        }
+        return ResponseEntity.ok(reservationService.confirmHold(request.getRequestId()));
     }
 
     @PostMapping("/{id}/release")
-    public ResponseEntity<RoomReservationLock> releaseHold(
-            @PathVariable Long id,
-            @Valid @RequestBody final IdRequest request) {
+    @Operation(summary = "Release hold", description = "Releases a previously held room reservation")
+    public ResponseEntity<RoomReservationDto> releaseHold(
+            @PathVariable Long id, 
+            @Valid @RequestBody RequestIdDto request) {
 
-        try {
-            final RoomReservationLock lock = hotelService.releaseHold(request.requestId());
-            return ResponseEntity.ok(lock);
-        } catch (IllegalStateException e) {
-            return ResponseEntity.notFound().build();
-        }
+        return ResponseEntity.ok(reservationService.releaseHold(request.getRequestId()));
     }
 }
